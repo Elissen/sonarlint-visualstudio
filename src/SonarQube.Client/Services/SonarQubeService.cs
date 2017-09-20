@@ -20,6 +20,11 @@ namespace SonarQube.Client.Services
 
         public SonarQubeService(ISonarQubeClient sonarqubeClient)
         {
+            if (sonarqubeClient == null)
+            {
+                throw new ArgumentNullException(nameof(sonarqubeClient));
+            }
+
             this.sonarqubeClient = sonarqubeClient;
         }
 
