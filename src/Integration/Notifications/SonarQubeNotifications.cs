@@ -41,12 +41,18 @@ namespace SonarLint.VisualStudio.Integration.Notifications
         private bool isVisible;
         private bool isBalloonTooltipVisible;
 
-        private DateTimeOffset lastRequestDate = DateTimeOffset.MinValue;
+        private readonly INotifyIcon notifyIcon;
         private readonly ITimer timer;
+        private const string iconPath = "pack://application:,,,/SonarLint;component/Resources/sonarqube_green.ico";
+        private const string tooltipTitle = "SonarQube notification";
+        private string message;
+        private readonly ISonarQubeServiceWrapper sqServiceWrapper;
         private readonly IStateManager stateManager;
         private readonly ISonarQubeServiceWrapper sonarQubeService;
         private readonly CancellationTokenSource cancellation = new CancellationTokenSource();
         private bool isEnabled = true;
+
+        public NotificationData NotificationData { get; private set; }
 
         [ImportingConstructor]
         [ExcludeFromCodeCoverage] // Do not unit test MEF constructor
@@ -130,12 +136,27 @@ namespace SonarLint.VisualStudio.Integration.Notifications
             }
         }
 
-        public ObservableCollection<NotificationEvent> NotificationEvents { get; }
-
-        public void Start()
+        public void Start(NotificationData notificationData)
         {
-            IsVisible = true;
+            NotificationData = notificationData ??
+                new NotificationData
+                {
+                    IsEnabled = true,
+                    LastNotificationDate = DateTimeOffset.Now.AddDays(-1)
+                };
 
+            if (!NotificationData.IsEnabled)
+            {
+                return;
+            }
+            IsVisible = true;
+            var oneDayAgo = DateTimeOffset.Now.AddDays(-1);
+            if (NotificationData.LastNotificationDate < oneDayAgo)
+            {
+                NotificationData.LastNotificationDate = oneDayAgo;
+            }
+
+            var serverConnection = ThreadHelper.Generic.Invoke(() => stateManager.GetConnectedServers().FirstOrDefault());
             timer.Start();
         }
 
@@ -144,6 +165,8 @@ namespace SonarLint.VisualStudio.Integration.Notifications
             cancellation.Cancel();
 
             timer.Stop();
+            notifyIcon?.Icon?.Dispose();
+            notifyIcon?.Dispose();
 
             IsVisible = false;
         }

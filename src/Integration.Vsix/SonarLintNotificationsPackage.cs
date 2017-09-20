@@ -20,7 +20,10 @@
 
 using System;
 using System.Diagnostics.CodeAnalysis;
+using System.IO;
 using System.Runtime.InteropServices;
+using System.Runtime.Serialization;
+using System.Runtime.Serialization.Formatters.Binary;
 using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
 using SonarLint.VisualStudio.Integration.Notifications;
@@ -40,13 +43,17 @@ namespace SonarLint.VisualStudio.Integration.Vsix
         /// </summary>
         public const string PackageGuidString = "c26b6802-dd9c-4a49-b8a5-0ad8ef04c579";
 
-        private ISonarQubeNotifications notifications;
+        private const string NotificationDataKey = "NotificationEventData";
         private IActiveSolutionBoundTracker activeSolutionBoundTracker;
+        private ISonarQubeNotifications notifications;
+        private readonly IFormatter formatter = new BinaryFormatter();
+        private NotificationData notificationData;
 
         private NotificationIndicator notificationIcon;
 
         protected override void Initialize()
         {
+            AddOptionKey(NotificationDataKey);
             base.Initialize();
 
             notifications = this.GetMefService<ISonarQubeNotifications>();
@@ -66,7 +73,7 @@ namespace SonarLint.VisualStudio.Integration.Vsix
 
             if (isBound)
             {
-                notifications.Start();
+                notifications.Start(notificationData);
             }
             else
             {
@@ -85,10 +92,31 @@ namespace SonarLint.VisualStudio.Integration.Vsix
 
             activeSolutionBoundTracker.SolutionBindingChanged -= OnSolutionBindingChanged;
 
-            if (notifications != null)
+            notifications.Dispose();
+        }
+
+        protected override void OnSaveOptions(string key, Stream stream)
+        {
+            if (key == NotificationDataKey)
             {
-                notifications.Dispose();
-                notifications = null;
+                formatter.Serialize(stream, notifications.NotificationData);
+            }
+        }
+
+        protected override void OnLoadOptions(string key, Stream stream)
+        {
+            if (key == NotificationDataKey)
+            {
+                try
+                {
+                    notificationData = formatter.Deserialize(stream) as NotificationData;
+                }
+                catch (Exception)
+                {
+                    // mbTODO: better idea than catching exception?
+                    // mbTODO: trace?
+                    notificationData = null;
+                }
             }
         }
 

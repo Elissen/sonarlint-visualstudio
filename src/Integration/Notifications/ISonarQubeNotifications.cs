@@ -24,8 +24,10 @@ namespace SonarLint.VisualStudio.Integration.Notifications
 {
     public interface ISonarQubeNotifications : IDisposable
     {
-        void Start();
+        void Start(NotificationData lastEventDate);
 
         void Stop();
+
+        NotificationData NotificationData { get; }
     }
 }
