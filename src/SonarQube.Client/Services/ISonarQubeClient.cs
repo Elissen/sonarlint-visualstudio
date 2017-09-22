@@ -86,5 +86,10 @@ namespace SonarQube.Client.Services
         ///     Validates the given credentials on the given SonarQube server.
         /// </summary>
         Task<Result<CredentialsDTO>> ValidateCredentialsAsync(ConnectionDTO connection, CancellationToken token);
+
+        /// <summary>
+        ///     Retrieves all issues for the given project, module or file key.
+        /// </summary>
+        Task<Result<ServerIssue[]>> GetIssuesAsync(ConnectionDTO connection, string key, CancellationToken token);
     }
 }

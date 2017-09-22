@@ -28,6 +28,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Web;
 using Newtonsoft.Json.Linq;
+using ProtoBuf;
 using SonarQube.Client.Helpers;
 using SonarQube.Client.Models;
 
@@ -66,8 +67,22 @@ namespace SonarQube.Client.Services
                 stringResponse => JObject.Parse(stringResponse)["components"].ToObject<ComponentDTO[]>());
         }
 
+        public Task<Result<ServerIssue[]>> GetIssuesAsync(ConnectionDTO connection, string key, CancellationToken token)
+        {
+            const string BatchIssuesAPI = "batch/issues"; // Since 5.1; internal
+
+            var query = AppendQueryString(BatchIssuesAPI, "?key={0}", key);
+
+            return InvokeSonarQubeApi(connection, query, token,
+                async (HttpResponseMessage response) =>
+                {
+                    var data = await response.Content.ReadAsStreamAsync();
+                    return Serializer.Deserialize<ServerIssue[]>(data);
+                });
+        }
+
         public Task<Result<OrganizationDTO[]>> GetOrganizationsAsync(ConnectionDTO connection,
-            OrganizationRequest request, CancellationToken token)
+                    OrganizationRequest request, CancellationToken token)
         {
             const string OrganizationsAPI = "api/organizations/search"; // Since 6.2; internal
 
@@ -187,14 +202,6 @@ namespace SonarQube.Client.Services
             return new Uri(normalBaseUri, normalApiUrl);
         }
 
-        private static async Task<string> GetStringResultAsync(HttpResponseMessage response,
-            CancellationToken token)
-        {
-            token.ThrowIfCancellationRequested();
-
-            return await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-        }
-
         private static async Task<HttpResponseMessage> InvokeGetRequest(HttpClient client, string apiUrl,
             CancellationToken token)
         {
@@ -230,9 +237,23 @@ namespace SonarQube.Client.Services
             using (var client = CreateHttpClient(connection))
             {
                 var httpResponse = await InvokeGetRequest(client, query, token);
-                var stringResponse = await GetStringResultAsync(httpResponse, token);
+                token.ThrowIfCancellationRequested();
+                var stringResponse = await httpResponse.Content.ReadAsStringAsync().ConfigureAwait(false);
 
                 return new Result<T>(httpResponse, parseStringResult(stringResponse));
+            }
+        }
+
+        private async Task<Result<T>> InvokeSonarQubeApi<T>(ConnectionDTO connection, string query, CancellationToken token,
+            Func<HttpResponseMessage, Task<T>> parseResponse)
+        {
+            using (var client = CreateHttpClient(connection))
+            {
+                var httpResponse = await InvokeGetRequest(client, query, token);
+                token.ThrowIfCancellationRequested();
+                var response = await parseResponse(httpResponse);
+
+                return new Result<T>(httpResponse, response);
             }
         }
     }
