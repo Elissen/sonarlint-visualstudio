@@ -25,12 +25,14 @@ using FluentAssertions;
 using Microsoft.VisualStudio.ComponentModelHost;
 using Microsoft.VisualStudio.Shell.Interop;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Moq;
 using SonarLint.VisualStudio.Integration.Connection;
 using SonarLint.VisualStudio.Integration.Resources;
-using SonarLint.VisualStudio.Integration.Service;
 using SonarLint.VisualStudio.Integration.TeamExplorer;
 using SonarLint.VisualStudio.Integration.WPF;
 using SonarLint.VisualStudio.Progress.Controller;
+using SonarQube.Client.Models;
+using SonarQube.Client.Services;
 
 namespace SonarLint.VisualStudio.Integration.UnitTests.Connection
 {
@@ -38,7 +40,7 @@ namespace SonarLint.VisualStudio.Integration.UnitTests.Connection
     public class ConnectControllerTests
     {
         private ConfigurableHost host;
-        private ConfigurableSonarQubeServiceWrapper sonarQubeService;
+        private Mock<ISonarQubeService> sonarQubeService;
         private ConfigurableConnectionWorkflow connectionWorkflow;
         private ConfigurableConnectionInformationProvider connectionProvider;
         private ConfigurableServiceProvider serviceProvider;
@@ -48,8 +50,8 @@ namespace SonarLint.VisualStudio.Integration.UnitTests.Connection
         [TestInitialize]
         public void TestInit()
         {
-            this.sonarQubeService = new ConfigurableSonarQubeServiceWrapper();
-            this.connectionWorkflow = new ConfigurableConnectionWorkflow(this.sonarQubeService);
+            this.sonarQubeService = new Mock<ISonarQubeService>();
+            this.connectionWorkflow = new ConfigurableConnectionWorkflow(this.sonarQubeService.Object);
             this.connectionProvider = new ConfigurableConnectionInformationProvider();
             this.serviceProvider = new ConfigurableServiceProvider();
             var outputWindow = new ConfigurableVsOutputWindow();
@@ -57,7 +59,7 @@ namespace SonarLint.VisualStudio.Integration.UnitTests.Connection
             this.serviceProvider.RegisterService(typeof(SVsOutputWindow), outputWindow);
             this.settings = new ConfigurableIntegrationSettings();
             this.host = new ConfigurableHost(this.serviceProvider, Dispatcher.CurrentDispatcher);
-            this.host.SonarQubeService = this.sonarQubeService;
+            this.host.SonarQubeService = this.sonarQubeService.Object;
 
             var mefExports = MefTestHelpers.CreateExport<IIntegrationSettings>(settings);
             var mefModel = ConfigurableComponentModel.CreateWithExports(mefExports);

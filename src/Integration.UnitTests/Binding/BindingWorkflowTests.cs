@@ -32,12 +32,14 @@ using Microsoft.VisualStudio.CodeAnalysis.RuleSets;
 using Microsoft.VisualStudio.ComponentModelHost;
 using Microsoft.VisualStudio.Shell.Interop;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Moq;
 using NuGet;
 using NuGet.VisualStudio;
 using SonarLint.VisualStudio.Integration.Binding;
 using SonarLint.VisualStudio.Integration.Persistence;
 using SonarLint.VisualStudio.Integration.Resources;
 using SonarQube.Client.Models;
+using SonarQube.Client.Services;
 
 namespace SonarLint.VisualStudio.Integration.UnitTests
 {
@@ -45,7 +47,7 @@ namespace SonarLint.VisualStudio.Integration.UnitTests
     public class BindingWorkflowTests
     {
         private ConfigurableServiceProvider serviceProvider;
-        private ConfigurableSonarQubeServiceWrapper sonarQubeService;
+        private Mock<ISonarQubeService> sonarQubeService;
         private ConfigurableVsOutputWindowPane outputWindowPane;
         private ConfigurableVsProjectSystemHelper projectSystemHelper;
         private ConfigurableHost host;
@@ -61,7 +63,7 @@ namespace SonarLint.VisualStudio.Integration.UnitTests
             this.outputWindowPane = outputWindow.GetOrCreateSonarLintPane();
             this.serviceProvider.RegisterService(typeof(SVsOutputWindow), outputWindow);
 
-            this.sonarQubeService = new ConfigurableSonarQubeServiceWrapper();
+            this.sonarQubeService = new Mock<ISonarQubeService>();
             this.projectSystemHelper = new ConfigurableVsProjectSystemHelper(this.serviceProvider);
 
             var sccFileSystem = new ConfigurableSourceControlledFileSystem();
@@ -82,7 +84,7 @@ namespace SonarLint.VisualStudio.Integration.UnitTests
         public void BindingWorkflow_ArgChecks()
         {
             var validConnection = new ConnectionInformation(new Uri("http://server"));
-            var validProjectInfo = new SonarQubeProject();
+            var validProjectInfo = new SonarQubeProject("", "");
             var validHost = new ConfigurableHost();
 
             Exceptions.Expect<ArgumentNullException>(() => new BindingWorkflow(null, validConnection, validProjectInfo));
@@ -96,7 +98,7 @@ namespace SonarLint.VisualStudio.Integration.UnitTests
             // Arrange
             const string QualityProfileName = "SQQualityProfileName";
             const string SonarQubeProjectName = "SQProjectName";
-            var projectInfo = new SonarQubeProject { Key = "key", Name = SonarQubeProjectName };
+            var projectInfo = new SonarQubeProject("key", SonarQubeProjectName);
             BindingWorkflow testSubject = this.CreateTestSubject(projectInfo);
             ConfigurableProgressController controller = new ConfigurableProgressController();
             var notifications = new ConfigurableProgressStepExecutionEvents();
@@ -112,8 +114,7 @@ namespace SonarLint.VisualStudio.Integration.UnitTests
             RoslynExportProfile export = RoslynExportProfileHelper.CreateExport(ruleSet, nugetPackages, additionalFiles);
 
             var language = Language.VBNET;
-            QualityProfile profile = this.ConfigureProfileExport(export, language);
-            profile.Name = QualityProfileName;
+            QualityProfile profile = this.ConfigureProfileExport(export, language, QualityProfileName);
 
             // Act
             testSubject.DownloadQualityProfileAsync(controller, notifications, new[] { language }, CancellationToken.None);
@@ -141,7 +142,7 @@ namespace SonarLint.VisualStudio.Integration.UnitTests
             var notifications = new ConfigurableProgressStepExecutionEvents();
 
             var language = Language.CSharp;
-            this.ConfigureProfileExport(null, Language.VBNET);
+            this.ConfigureProfileExport(null, Language.VBNET, "");
 
             // Act
             testSubject.DownloadQualityProfileAsync(controller, notifications, new[] { language }, CancellationToken.None);
@@ -168,7 +169,7 @@ namespace SonarLint.VisualStudio.Integration.UnitTests
             var notifications = new ConfigurableProgressStepExecutionEvents();
 
             var language = Language.CSharp;
-            this.ConfigureProfileExport(null, language);
+            this.ConfigureProfileExport(null, language, "");
 
             // Act
             testSubject.DownloadQualityProfileAsync(controller, notifications, new[] { language }, CancellationToken.None);
@@ -192,7 +193,7 @@ namespace SonarLint.VisualStudio.Integration.UnitTests
             // Arrange
             const string QualityProfileName = "SQQualityProfileName";
             const string SonarQubeProjectName = "SQProjectName";
-            var projectInfo = new SonarQubeProject { Key = "key", Name = SonarQubeProjectName };
+            var projectInfo = new SonarQubeProject("key", SonarQubeProjectName);
             BindingWorkflow testSubject = this.CreateTestSubject(projectInfo);
             ConfigurableProgressController controller = new ConfigurableProgressController();
             var notifications = new ConfigurableProgressStepExecutionEvents();
@@ -203,8 +204,7 @@ namespace SonarLint.VisualStudio.Integration.UnitTests
             RoslynExportProfile export = RoslynExportProfileHelper.CreateExport(ruleSet, nugetPackages, additionalFiles);
 
             var language = Language.VBNET;
-            QualityProfile profile = this.ConfigureProfileExport(export, language);
-            profile.Name = QualityProfileName;
+            QualityProfile profile = this.ConfigureProfileExport(export, language, QualityProfileName);
 
             // Act
             testSubject.DownloadQualityProfileAsync(controller, notifications, new[] { language }, CancellationToken.None);
@@ -228,7 +228,7 @@ namespace SonarLint.VisualStudio.Integration.UnitTests
             // Arrange
             const string QualityProfileName = "SQQualityProfileName";
             const string SonarQubeProjectName = "SQProjectName";
-            var projectInfo = new SonarQubeProject { Key = "key", Name = SonarQubeProjectName };
+            var projectInfo = new SonarQubeProject("key", SonarQubeProjectName);
             BindingWorkflow testSubject = this.CreateTestSubject(projectInfo);
             ConfigurableProgressController controller = new ConfigurableProgressController();
             var notifications = new ConfigurableProgressStepExecutionEvents();
@@ -248,8 +248,7 @@ namespace SonarLint.VisualStudio.Integration.UnitTests
             RoslynExportProfile export = RoslynExportProfileHelper.CreateExport(ruleSet, nugetPackages, additionalFiles);
 
             var language = Language.VBNET;
-            QualityProfile profile = this.ConfigureProfileExport(export, language);
-            profile.Name = QualityProfileName;
+            QualityProfile profile = this.ConfigureProfileExport(export, language, QualityProfileName);
 
             // Act
             testSubject.DownloadQualityProfileAsync(controller, notifications, new[] { language }, CancellationToken.None);
@@ -273,7 +272,7 @@ namespace SonarLint.VisualStudio.Integration.UnitTests
             // Arrange
             const string QualityProfileName = "SQQualityProfileName";
             const string SonarQubeProjectName = "SQProjectName";
-            var projectInfo = new SonarQubeProject { Key = "key", Name = SonarQubeProjectName };
+            var projectInfo = new SonarQubeProject("key", SonarQubeProjectName);
             BindingWorkflow testSubject = this.CreateTestSubject(projectInfo);
             ConfigurableProgressController controller = new ConfigurableProgressController();
             var notifications = new ConfigurableProgressStepExecutionEvents();
@@ -288,8 +287,7 @@ namespace SonarLint.VisualStudio.Integration.UnitTests
             RoslynExportProfile export = RoslynExportProfileHelper.CreateExport(ruleSet, Enumerable.Empty<PackageName>(), additionalFiles);
 
             var language = Language.VBNET;
-            QualityProfile profile = this.ConfigureProfileExport(export, language);
-            profile.Name = QualityProfileName;
+            QualityProfile profile = this.ConfigureProfileExport(export, language, QualityProfileName);
 
             // Act
             testSubject.DownloadQualityProfileAsync(controller, notifications, new[] { language }, CancellationToken.None);
@@ -773,8 +771,8 @@ namespace SonarLint.VisualStudio.Integration.UnitTests
         private BindingWorkflow CreateTestSubject(SonarQubeProject projectInfo = null)
         {
             ConnectionInformation connected = new ConnectionInformation(new Uri("http://connected"));
-            this.host.SonarQubeService = this.sonarQubeService;
-            var useProjectInfo = projectInfo ?? new SonarQubeProject { Key = "key" };
+            this.host.SonarQubeService = this.sonarQubeService.Object;
+            var useProjectInfo = projectInfo ?? new SonarQubeProject("key", "");
             return new BindingWorkflow(this.host, connected, useProjectInfo);
         }
 
@@ -796,11 +794,12 @@ namespace SonarLint.VisualStudio.Integration.UnitTests
             return packageInstaller;
         }
 
-        private QualityProfile ConfigureProfileExport(RoslynExportProfile export, Language language)
+        private QualityProfile ConfigureProfileExport(RoslynExportProfile export, Language language, string profileName)
         {
-            var profile = new QualityProfile { Language = SonarQubeServiceWrapper.GetServerLanguageKey(language) };
-            this.sonarQubeService.ReturnProfile[language] = profile;
-            this.sonarQubeService.ReturnExport[profile] = export;
+            var profile = new QualityProfile("", profileName, "", false, DateTime.Now);
+            // TODO: AMAURY
+            //this.sonarQubeService.ReturnProfile[language] = profile;
+            //this.sonarQubeService.ReturnExport[profile] = export;
 
             return profile;
         }

@@ -27,9 +27,11 @@ using EnvDTE;
 using FluentAssertions;
 using Microsoft.VisualStudio.Shell.Interop;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Moq;
 using SonarLint.VisualStudio.Integration.Persistence;
 using SonarLint.VisualStudio.Integration.Resources;
-using SonarLint.VisualStudio.Integration.Service;
+using SonarQube.Client.Models;
+using SonarQube.Client.Services;
 
 namespace SonarLint.VisualStudio.Integration.UnitTests
 {
@@ -196,7 +198,7 @@ namespace SonarLint.VisualStudio.Integration.UnitTests
                 ProfileKey = "Profile2", // Different profile key
                 ProfileTimestamp = null
             };
-            this.ConfigureValidSonarQubeServiceWrapper(this.bindingSerializer.CurrentBinding, null, qpKey, Language.CSharp);
+            this.ConfigureValidSonarQubeServiceWrapper(this.bindingSerializer.CurrentBinding, DateTime.Now, qpKey, Language.CSharp);
 
             // Act + Assert
             VerifyBackgroundExecution(true, testSubject,
@@ -220,7 +222,7 @@ namespace SonarLint.VisualStudio.Integration.UnitTests
             DateTime sameTimestamp = DateTime.Now;
             this.bindingSerializer.CurrentBinding.Profiles[Language.CSharp] = new ApplicableQualityProfile
             {
-                ProfileKey = SonarQubeServiceWrapper.GetServerLanguageKey(Language.CSharp) + "Old", // Different profile key
+                ProfileKey = "csOld", // Different profile key
                 ProfileTimestamp = sameTimestamp
             };
             this.ConfigureValidSonarQubeServiceWrapper(this.bindingSerializer.CurrentBinding, sameTimestamp, qpKey, Language.CSharp);
@@ -250,7 +252,7 @@ namespace SonarLint.VisualStudio.Integration.UnitTests
                 ProfileKey = qpKey,
                 ProfileTimestamp = null
             };
-            this.ConfigureValidSonarQubeServiceWrapper(this.bindingSerializer.CurrentBinding, null, qpKey, Language.CSharp, Language.VBNET);
+            this.ConfigureValidSonarQubeServiceWrapper(this.bindingSerializer.CurrentBinding, DateTime.Now, qpKey, Language.CSharp, Language.VBNET);
 
             // Act + Assert
             VerifyBackgroundExecution(true, testSubject,
@@ -305,7 +307,7 @@ namespace SonarLint.VisualStudio.Integration.UnitTests
             };
             this.bindingSerializer.CurrentBinding.Profiles[Language.VBNET] = new ApplicableQualityProfile
             {
-                ProfileKey = SonarQubeServiceWrapper.GetServerLanguageKey(Language.VBNET),
+                ProfileKey = "vbnet",
                 ProfileTimestamp = DateTime.Now
             };
             this.ConfigureSonarQubeServiceWrapperWithServiceError();
@@ -360,15 +362,15 @@ namespace SonarLint.VisualStudio.Integration.UnitTests
 
         private void ConfigureSonarQubeServiceWrapperWithServiceError()
         {
-            var sqService = new ConfigurableSonarQubeServiceWrapper();
-            this.host.SonarQubeService = sqService;
+            var sqService = new Mock<ISonarQubeService>();
+            this.host.SonarQubeService = sqService.Object;
             sqService.AllowConnections = false;
         }
 
-        private void ConfigureValidSonarQubeServiceWrapper(BoundSonarQubeProject binding, DateTime? timestamp, string qualityProfileKey, params Language[] expectedLanguageProfiles)
+        private void ConfigureValidSonarQubeServiceWrapper(BoundSonarQubeProject binding, DateTime timestamp, string qualityProfileKey, params Language[] expectedLanguageProfiles)
         {
-            var sqService = new ConfigurableSonarQubeServiceWrapper();
-            this.host.SonarQubeService = sqService;
+            var sqService = new Mock<ISonarQubeService>();
+            this.host.SonarQubeService = sqService.Object;
 
             sqService.AllowConnections = true;
             sqService.ExpectedConnection = binding.CreateConnectionInformation();
@@ -376,12 +378,7 @@ namespace SonarLint.VisualStudio.Integration.UnitTests
 
             foreach (Language language in expectedLanguageProfiles)
             {
-                sqService.ReturnProfile[language] = new QualityProfile
-                {
-                    Key = qualityProfileKey,
-                    Language = SonarQubeServiceWrapper.GetServerLanguageKey(language),
-                    QualityProfileTimestamp = timestamp
-                };
+                sqService.ReturnProfile[language] = new QualityProfile(qualityProfileKey, "", language == Language.CSharp ? "cs" : "vbnet", false, timestamp);
             }
         }
 

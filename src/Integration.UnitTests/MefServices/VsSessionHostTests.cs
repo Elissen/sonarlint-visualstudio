@@ -24,9 +24,12 @@ using FluentAssertions;
 using Microsoft.VisualStudio.ComponentModelHost;
 using Microsoft.VisualStudio.Shell.Interop;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Moq;
 using SonarLint.VisualStudio.Integration.Persistence;
 using SonarLint.VisualStudio.Integration.TeamExplorer;
 using SonarLint.VisualStudio.Integration.WPF;
+using SonarQube.Client.Models;
+using SonarQube.Client.Services;
 
 namespace SonarLint.VisualStudio.Integration.UnitTests.TeamExplorer
 {
@@ -34,7 +37,7 @@ namespace SonarLint.VisualStudio.Integration.UnitTests.TeamExplorer
     public class VsSessionHostTests
     {
         private ConfigurableServiceProvider serviceProvider;
-        private ConfigurableSonarQubeServiceWrapper sonarQubeService;
+        private Mock<ISonarQubeService> sonarQubeService;
         private ConfigurableStateManager stateManager;
         private ConfigurableProgressStepRunner stepRunner;
         private ConfigurableSolutionBindingSerializer solutionBinding;
@@ -46,7 +49,7 @@ namespace SonarLint.VisualStudio.Integration.UnitTests.TeamExplorer
         {
             ThreadHelper.SetCurrentThreadAsUIThread();
             this.serviceProvider = new ConfigurableServiceProvider(assertOnUnexpectedServiceRequest: false);
-            this.sonarQubeService = new ConfigurableSonarQubeServiceWrapper();
+            this.sonarQubeService = new Mock<ISonarQubeService>();
             this.stepRunner = new ConfigurableProgressStepRunner();
             this.solutionBinding = new ConfigurableSolutionBindingSerializer();
 
@@ -237,7 +240,7 @@ namespace SonarLint.VisualStudio.Integration.UnitTests.TeamExplorer
             var tracker = new ConfigurableActiveSolutionTracker();
             this.CreateTestSubject(tracker);
             // Previous binding information that should be cleared once there's no solution
-            var boundProject = new Integration.Service.SonarQubeProject { Key = "bla" };
+            var boundProject = new SonarQubeProject("bla", "");
             this.stateManager.BoundProjectKey = boundProject.Key;
             this.stateManager.SetBoundProject(boundProject);
 
@@ -260,7 +263,7 @@ namespace SonarLint.VisualStudio.Integration.UnitTests.TeamExplorer
             // Arrange
             var tracker = new ConfigurableActiveSolutionTracker();
             var testSubject = this.CreateTestSubject(tracker);
-            var boundProject = new Integration.Service.SonarQubeProject { Key = "bla" };
+            var boundProject = new SonarQubeProject("bla", "");
             this.solutionBinding.CurrentBinding = new Persistence.BoundSonarQubeProject(new Uri("http://bound"), boundProject.Key);
             this.stateManager.SetBoundProject(boundProject);
 
@@ -385,7 +388,7 @@ namespace SonarLint.VisualStudio.Integration.UnitTests.TeamExplorer
             var host = new VsSessionHost(this.serviceProvider,
                 stateManager,
                 this.stepRunner,
-                this.sonarQubeService,
+                this.sonarQubeService.Object,
                 tracker?? new ConfigurableActiveSolutionTracker(),
                 Dispatcher.CurrentDispatcher);
 
