@@ -49,9 +49,10 @@
                 </Ellipse.Triggers>
             </Ellipse>
             <ToggleButton.ContextMenu>
-                <ContextMenu>
+                <ContextMenu PlacementTarget="{Binding ElementName=PART_Button}">
                     <MenuItem Header="Enable notifications for this solution" IsCheckable="True"
-                            IsChecked="{Binding DataContext.IsEnabled, ElementName=UserControl}" />
+                              DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource FindAncestor, AncestorType=ContextMenu}}"
+                              IsChecked="{Binding IsEnabled}" />
                 </ContextMenu>
             </ToggleButton.ContextMenu>
         </ToggleButton>
