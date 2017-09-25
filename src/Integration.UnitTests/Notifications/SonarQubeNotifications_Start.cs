@@ -18,6 +18,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
+using System;
 using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
@@ -39,6 +40,11 @@ namespace SonarLint.VisualStudio.Integration.Notifications.UnitTests
         {
             sqService = new ConfigurableSonarQubeServiceWrapper();
             stateManager = new ConfigurableStateManager();
+            var connection = new ConnectionInformation(new Uri("http://127.0.0.1"));
+            var projects = new ProjectInformation[] { new ProjectInformation(), new ProjectInformation() };
+            stateManager.SetProjects(connection, projects);
+            (stateManager as ConfigurableStateManager).ConnectedServers.Add(connection);
+
             timerMock = new Mock<ITimer>();
         }
 
@@ -52,11 +58,56 @@ namespace SonarLint.VisualStudio.Integration.Notifications.UnitTests
             notifications.IsVisible.Should().BeFalse(); // check default value
 
             // Act
-            notifications.Start();
+            notifications.Start(null);
 
             // Assert
             timerMock.VerifyAll();
             notifications.IsVisible.Should().BeTrue();
+        }
+
+
+        [TestMethod]
+        public void Test_DefaultNotificationDate_IsOneDayAgo()
+        {
+            // Arrange
+            using (var notifications = new SonarQubeNotifications(sqService, stateManager,
+                timerMock.Object))
+            {
+                notifications.Start(null);
+
+                // Assert
+                AreDatesEqual(notifications.NotificationData.LastNotificationDate,
+                    DateTimeOffset.Now.AddDays(-1), TimeSpan.FromMinutes(1)).Should().BeTrue();
+            }
+        }
+
+        [TestMethod]
+        public void Test_OldNotificationDate_IsSetToOneDayAgo()
+        {
+            // Arrange
+            using (var notifications = new SonarQubeNotifications(sqService, stateManager,
+                timerMock.Object))
+            {
+                var date = new NotificationData
+                {
+                    IsEnabled = true,
+                    LastNotificationDate =
+                       new DateTimeOffset(2000, 1, 1, 0, 0, 0, TimeSpan.FromHours(1))
+                };
+
+                notifications.Start(date);
+
+                // Assert
+                AreDatesEqual(notifications.NotificationData.LastNotificationDate,
+                    DateTimeOffset.Now.AddDays(-1), TimeSpan.FromMinutes(1)).Should().BeTrue();
+            }
+        }
+
+        private static bool AreDatesEqual(DateTimeOffset date1, DateTimeOffset date2,
+            TimeSpan allowedDifference)
+        {
+            var diff = date1 - date2;
+            return diff.Duration() < allowedDifference;
         }
     }
 }

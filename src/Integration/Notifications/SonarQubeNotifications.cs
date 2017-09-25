@@ -41,24 +41,21 @@ namespace SonarLint.VisualStudio.Integration.Notifications
         private bool isVisible;
         private bool isBalloonTooltipVisible;
 
-        private readonly INotifyIcon notifyIcon;
         private readonly ITimer timer;
         private const string iconPath = "pack://application:,,,/SonarLint;component/Resources/sonarqube_green.ico";
         private const string tooltipTitle = "SonarQube notification";
-        private string message;
-        private readonly ISonarQubeServiceWrapper sqServiceWrapper;
         private readonly IStateManager stateManager;
         private readonly ISonarQubeServiceWrapper sonarQubeService;
         private readonly CancellationTokenSource cancellation = new CancellationTokenSource();
-        private bool isEnabled = true;
 
+        public ObservableCollection<NotificationEvent> NotificationEvents { get; }
         public NotificationData NotificationData { get; private set; }
 
         [ImportingConstructor]
         [ExcludeFromCodeCoverage] // Do not unit test MEF constructor
         internal SonarQubeNotifications(IHost host)
             : this(host.SonarQubeService, host.VisualStateManager,
-                  new TimerWrapper { Interval = 10000 /* should be 60sec */ })
+                  new TimerWrapper { Interval = 10000 /* 60sec */ })
         {
         }
 
@@ -116,11 +113,13 @@ namespace SonarLint.VisualStudio.Integration.Notifications
         {
             get
             {
-                return isEnabled;
+                return NotificationData.IsEnabled;
             }
             set
             {
+                var isEnabled = NotificationData.IsEnabled;
                 SetAndRaisePropertyChanged(ref isEnabled, value);
+                NotificationData.IsEnabled = IsEnabled;
             }
         }
 
@@ -145,19 +144,15 @@ namespace SonarLint.VisualStudio.Integration.Notifications
                     LastNotificationDate = DateTimeOffset.Now.AddDays(-1)
                 };
 
-            if (!NotificationData.IsEnabled)
-            {
-                return;
-            }
-            IsVisible = true;
             var oneDayAgo = DateTimeOffset.Now.AddDays(-1);
             if (NotificationData.LastNotificationDate < oneDayAgo)
             {
                 NotificationData.LastNotificationDate = oneDayAgo;
             }
 
-            var serverConnection = ThreadHelper.Generic.Invoke(() => stateManager.GetConnectedServers().FirstOrDefault());
+            var serverConnection = ThreadHelper.Generic.Invoke(() => stateManager?.GetConnectedServers().FirstOrDefault());
             timer.Start();
+            OnTimerElapsed(this, null);
         }
 
         public void Stop()
@@ -165,17 +160,28 @@ namespace SonarLint.VisualStudio.Integration.Notifications
             cancellation.Cancel();
 
             timer.Stop();
-            notifyIcon?.Icon?.Dispose();
-            notifyIcon?.Dispose();
-
             IsVisible = false;
         }
 
         private void OnTimerElapsed(object sender, ElapsedEventArgs e)
         {
             var events = GetNotificationEvents();
+            if (events == null)
+            {
+                Stop();
+                return;
+            }
 
-            ThreadHelper.Generic.Invoke(() => SetNotificationEvents(events));
+            if (!IsVisible && events != null)
+            {
+                IsVisible = true;
+            }
+
+
+            if (IsEnabled)
+            {
+                ThreadHelper.Generic.Invoke(() => SetNotificationEvents(events));
+            }
         }
 
         private async void AnimateBalloonTooltip()
@@ -205,21 +211,29 @@ namespace SonarLint.VisualStudio.Integration.Notifications
 
         private NotificationEvent[] GetNotificationEvents()
         {
-            var connection = ThreadHelper.Generic.Invoke(() => stateManager.GetConnectedServers().FirstOrDefault());
-            var projectKey = stateManager.BoundProjectKey;
-
-            NotificationEvent[] events = null;
+            var connection = ThreadHelper.Generic.Invoke(() => stateManager?.GetConnectedServers().FirstOrDefault());
+            var projectKey = stateManager?.BoundProjectKey;
 
             if (connection != null && projectKey != null)
             {
-                if (sonarQubeService.TryGetNotificationEvents(connection, cancellation.Token, projectKey,
-                    lastRequestDate, out events))
-                {
-                    lastRequestDate = events.Max(ev => ev.Date);
-                }
+                return new NotificationEvent[0];
             }
 
-            return events ?? new NotificationEvent[0];
+            NotificationEvent[] events = null;
+            if (sonarQubeService.TryGetNotificationEvents(connection, cancellation.Token, projectKey,
+                NotificationData.LastNotificationDate, out events))
+            {
+                if (events?.Length > 0)
+                {
+                    NotificationData.LastNotificationDate = events.Max(ev => ev.Date);
+                }
+            }
+            else
+            {
+                events = new NotificationEvent[0];
+            }
+
+            return events;
         }
 
         public void Dispose()

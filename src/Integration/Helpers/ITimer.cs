@@ -25,10 +25,11 @@ namespace SonarLint.VisualStudio.Integration
 {
     public interface ITimer : IDisposable
     {
+        event ElapsedEventHandler Elapsed;
+
         bool AutoReset { get; set; }
         bool Enabled { get; set; }
         double Interval { get; set; }
-        event ElapsedEventHandler Elapsed;
 
         void Start();
         void Stop();
