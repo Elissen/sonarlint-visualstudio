@@ -219,14 +219,21 @@ namespace SonarQube.Client.Services
             return roslynExportResult.Value;
         }
 
-        public async Task<IList<SonarQubeIssue>> GetSuppressedIssues(string key, CancellationToken token)
+        public async Task<IList<SonarQubeIssue>> GetSuppressedIssuesAsync(string key, CancellationToken token)
         {
             EnsureIsConnected();
 
             var allIssuesResult = await this.sonarqubeClient.GetIssuesAsync(this.connection, key, token);
             allIssuesResult.EnsureSuccess();
 
-            return allIssuesResult.Value.Select(SonarQubeIssue.FromDto).ToList(); // TODO: filter issues
+            return allIssuesResult.Value
+                .Where(x =>
+                {
+                    var resolutionState = SonarQubeIssue.ParseResolutionState(x.Resolution);
+                    return resolutionState == SonarQubeIssueResolutionState.WontFix ||
+                        resolutionState == SonarQubeIssueResolutionState.FalsePositive;
+                })
+                .Select(SonarQubeIssue.FromDto).ToList();
         }
 
         internal void EnsureIsConnected()

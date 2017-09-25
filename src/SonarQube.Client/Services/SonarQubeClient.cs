@@ -19,6 +19,7 @@
  */
 
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
@@ -27,8 +28,8 @@ using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Web;
+using Google.Protobuf;
 using Newtonsoft.Json.Linq;
-using ProtoBuf;
 using SonarQube.Client.Helpers;
 using SonarQube.Client.Models;
 
@@ -76,8 +77,15 @@ namespace SonarQube.Client.Services
             return InvokeSonarQubeApi(connection, query, token,
                 async (HttpResponseMessage response) =>
                 {
-                    var data = await response.Content.ReadAsStreamAsync();
-                    return Serializer.Deserialize<ServerIssue[]>(data);
+                    var byteArray = await response.Content.ReadAsByteArrayAsync();
+                    // Protobuf for C# throws when trying to read outside of the buffer and ReadAsStreamAsync returns a non
+                    // seekable stream so we can't determine when to stop. The hack is to use an intermediate MemoryStream
+                    // so we can control when to stop reading.
+                    // Note we might want to use FileStream instead to avoid intensive memory usage.
+                    using (var stream = new MemoryStream(byteArray))
+                    {
+                        return ReadFromProtobufStream(stream, ServerIssue.Parser).ToArray();
+                    }
                 });
         }
 
@@ -254,6 +262,15 @@ namespace SonarQube.Client.Services
                 var response = await parseResponse(httpResponse);
 
                 return new Result<T>(httpResponse, response);
+            }
+        }
+
+        private static IEnumerable<T> ReadFromProtobufStream<T>(Stream stream, MessageParser<T> parser)
+            where T : IMessage<T>
+        {
+            while (stream.Position < stream.Length)
+            {
+                yield return parser.ParseDelimitedFrom(stream);
             }
         }
     }

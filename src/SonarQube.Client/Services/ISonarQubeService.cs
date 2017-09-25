@@ -47,6 +47,6 @@ namespace SonarQube.Client.Services
         Task<RoslynExportProfile> GetRoslynExportProfileAsync(string qualityProfileName, ServerLanguage language,
             CancellationToken token);
 
-        Task<IList<SonarQubeIssue>> GetSuppressedIssues(string key, CancellationToken token);
+        Task<IList<SonarQubeIssue>> GetSuppressedIssuesAsync(string key, CancellationToken token);
     }
 }

@@ -113,6 +113,41 @@ namespace SonarQube.Client.Services.Tests
         }
 
         [TestMethod]
+        public async Task GetAllOrganizationsAsync_ReturnsExpectedResult()
+        {
+            // Arrange
+            var successResponse = new HttpResponseMessage(HttpStatusCode.OK);
+            var client = new Mock<ISonarQubeClient>();
+            client.Setup(x => x.ValidateCredentialsAsync(It.IsAny<ConnectionDTO>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(() => new Result<CredentialsDTO>(successResponse, new CredentialsDTO { AreValid = true }));
+            client.Setup(x => x.GetVersionAsync(It.IsAny<ConnectionDTO>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(() => new Result<VersionDTO>(successResponse, new VersionDTO { Version = "5.6" }));
+            client.Setup(x => x.GetOrganizationsAsync(It.IsAny<ConnectionDTO>(), It.IsAny<OrganizationRequest>(),
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync(
+                    new Queue<Result<OrganizationDTO[]>>(
+                        new Result<OrganizationDTO[]>[]
+                        {
+                            new Result<OrganizationDTO[]>(successResponse,
+                                new[] { new OrganizationDTO { Key = "key", Name = "name" } }),
+                            new Result<OrganizationDTO[]>(successResponse, new OrganizationDTO[0])
+                        }
+                    ).Dequeue);
+            var service = new SonarQubeService(client.Object);
+            await service.ConnectAsync(new ConnectionInformation(new Uri("http://mysq.com")), CancellationToken.None);
+
+            // Act
+            var result = await service.GetAllOrganizationsAsync(CancellationToken.None);
+
+            // Assert
+            client.VerifyAll();
+            result.Should().NotBeNull();
+            result.Should().HaveCount(1);
+            result[0].Key.Should().Be("key");
+            result[0].Name.Should().Be("name");
+        }
+
+        [TestMethod]
         public async Task GetAllPluginsAsync_ReturnsExpectedResult()
         {
             // Arrange
@@ -137,6 +172,67 @@ namespace SonarQube.Client.Services.Tests
             result.Should().HaveCount(1);
             result[0].Key.Should().Be("key");
             result[0].Version.Should().Be("version");
+        }
+
+        [TestMethod]
+        public async Task GetAllProjectsAsync_WhenNoOrganizationIsSpecified_ReturnsExpectedResult()
+        {
+            // Arrange
+            var successResponse = new HttpResponseMessage(HttpStatusCode.OK);
+            var client = new Mock<ISonarQubeClient>();
+            client.Setup(x => x.ValidateCredentialsAsync(It.IsAny<ConnectionDTO>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(() => new Result<CredentialsDTO>(successResponse, new CredentialsDTO { AreValid = true }));
+            client.Setup(x => x.GetVersionAsync(It.IsAny<ConnectionDTO>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(() => new Result<VersionDTO>(successResponse, new VersionDTO { Version = "5.6" }));
+            client.Setup(x => x.GetProjectsAsync(It.IsAny<ConnectionDTO>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(() => new Result<ProjectDTO[]>(successResponse,
+                    new[] { new ProjectDTO { Key = "key", Name = "name" } }));
+            var service = new SonarQubeService(client.Object);
+            await service.ConnectAsync(new ConnectionInformation(new Uri("http://mysq.com")), CancellationToken.None);
+
+            // Act
+            var result = await service.GetAllProjectsAsync(null, CancellationToken.None);
+
+            // Assert
+            client.VerifyAll();
+            result.Should().NotBeNull();
+            result.Should().HaveCount(1);
+            result[0].Key.Should().Be("key");
+            result[0].Name.Should().Be("name");
+        }
+
+        [TestMethod]
+        public async Task GetAllProjectsAsync_WhenOrganizationIsSpecified_ReturnsExpectedResult()
+        {
+            // Arrange
+            var successResponse = new HttpResponseMessage(HttpStatusCode.OK);
+            var client = new Mock<ISonarQubeClient>();
+            client.Setup(x => x.ValidateCredentialsAsync(It.IsAny<ConnectionDTO>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(() => new Result<CredentialsDTO>(successResponse, new CredentialsDTO { AreValid = true }));
+            client.Setup(x => x.GetVersionAsync(It.IsAny<ConnectionDTO>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(() => new Result<VersionDTO>(successResponse, new VersionDTO { Version = "5.6" }));
+            client.Setup(x => x.GetComponentsSearchProjectsAsync(It.IsAny<ConnectionDTO>(), It.IsAny<ComponentRequest>(),
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync(
+                    new Queue<Result<ComponentDTO[]>>(
+                        new Result<ComponentDTO[]>[]
+                        {
+                            new Result<ComponentDTO[]>(successResponse, new[] { new ComponentDTO { Key = "key", Name = "name" } }),
+                            new Result<ComponentDTO[]>(successResponse, new ComponentDTO[0])
+                        }
+                    ).Dequeue);
+            var service = new SonarQubeService(client.Object);
+            await service.ConnectAsync(new ConnectionInformation(new Uri("http://mysq.com")), CancellationToken.None);
+
+            // Act
+            var result = await service.GetAllProjectsAsync("org", CancellationToken.None);
+
+            // Assert
+            client.VerifyAll();
+            result.Should().NotBeNull();
+            result.Should().HaveCount(1);
+            result[0].Key.Should().Be("key");
+            result[0].Name.Should().Be("name");
         }
 
         [TestMethod]
@@ -214,20 +310,53 @@ namespace SonarQube.Client.Services.Tests
         }
 
         [TestMethod]
+        public async Task GetSuppressedIssuesAsync_ReturnsExpectedResults()
+        {
+            var successResponse = new HttpResponseMessage(HttpStatusCode.OK);
+            var client = new Mock<ISonarQubeClient>();
+            client.Setup(x => x.ValidateCredentialsAsync(It.IsAny<ConnectionDTO>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(() => new Result<CredentialsDTO>(successResponse, new CredentialsDTO { AreValid = true }));
+            client.Setup(x => x.GetVersionAsync(It.IsAny<ConnectionDTO>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(() => new Result<VersionDTO>(successResponse, new VersionDTO { Version = "5.6" }));
+            client.Setup(x => x.GetIssuesAsync(It.IsAny<ConnectionDTO>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(() => new Result<ServerIssue[]>(successResponse,
+                    new[]
+                    {
+                        new ServerIssue { Resolution = "WONTFIX" },
+                        new ServerIssue { Resolution = "FALSE-POSITIVE" },
+                        new ServerIssue { Resolution = "OPEN" }
+                    }));
+            var service = new SonarQubeService(client.Object);
+            await service.ConnectAsync(new ConnectionInformation(new Uri("http://mysq.com")), CancellationToken.None);
+
+            // Act
+            var result = await service.GetSuppressedIssuesAsync("key", CancellationToken.None);
+
+            // Assert
+            client.VerifyAll();
+            result.Should().HaveCount(2);
+            result[0].ResolutionState.Should().Be(SonarQubeIssueResolutionState.WontFix);
+            result[1].ResolutionState.Should().Be(SonarQubeIssueResolutionState.FalsePositive);
+        }
+
+        [TestMethod]
         public async Task HasOrganizationsFeature_WhenConnectedToSQSInferiorTo62_ReturnsFalse()
         {
-            await HasOrganizationsFeature_WhenConnectedToSQVersion_ReturnsExpected("5.6", false);
-            await HasOrganizationsFeature_WhenConnectedToSQVersion_ReturnsExpected("6.0", false);
-            await HasOrganizationsFeature_WhenConnectedToSQVersion_ReturnsExpected("6.1", false);
+            var failingVersions = new[] { "5.6", "6.0", "6.1" };
+            foreach (var version in failingVersions)
+            {
+                await HasOrganizationsFeature_WhenConnectedToSQVersion_ReturnsExpected(version, false);
+            }
         }
 
         [TestMethod]
         public async Task HasOrganizationsFeature_WhenConnectedToSQSuperiorTo62_ReturnsTrue()
         {
-            await HasOrganizationsFeature_WhenConnectedToSQVersion_ReturnsExpected("6.2", true);
-            await HasOrganizationsFeature_WhenConnectedToSQVersion_ReturnsExpected("6.3", true);
-            await HasOrganizationsFeature_WhenConnectedToSQVersion_ReturnsExpected("6.4", true);
-            await HasOrganizationsFeature_WhenConnectedToSQVersion_ReturnsExpected("6.5", true);
+            var passingVersions = new[] { "6.2", "6.3", "6.4", "6.5" };
+            foreach (var version in passingVersions)
+            {
+                await HasOrganizationsFeature_WhenConnectedToSQVersion_ReturnsExpected(version, true);
+            }
         }
         private async Task HasOrganizationsFeature_WhenConnectedToSQVersion_ReturnsExpected(string version, bool expected)
         {
@@ -247,102 +376,6 @@ namespace SonarQube.Client.Services.Tests
             // Assert
             client.VerifyAll();
             result.Should().Be(expected);
-        }
-
-        [TestMethod]
-        public async Task GetAllOrganizationsAsync_ReturnsExpectedResult()
-        {
-            // Arrange
-            var successResponse = new HttpResponseMessage(HttpStatusCode.OK);
-            var client = new Mock<ISonarQubeClient>();
-            client.Setup(x => x.ValidateCredentialsAsync(It.IsAny<ConnectionDTO>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync(() => new Result<CredentialsDTO>(successResponse, new CredentialsDTO { AreValid = true }));
-            client.Setup(x => x.GetVersionAsync(It.IsAny<ConnectionDTO>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync(() => new Result<VersionDTO>(successResponse, new VersionDTO { Version = "5.6" }));
-            client.Setup(x => x.GetOrganizationsAsync(It.IsAny<ConnectionDTO>(), It.IsAny<OrganizationRequest>(),
-                    It.IsAny<CancellationToken>()))
-                .ReturnsAsync(
-                    new Queue<Result<OrganizationDTO[]>>(
-                        new Result<OrganizationDTO[]>[]
-                        {
-                            new Result<OrganizationDTO[]>(successResponse,
-                                new[] { new OrganizationDTO { Key = "key", Name = "name" } }),
-                            new Result<OrganizationDTO[]>(successResponse, new OrganizationDTO[0])
-                        }
-                    ).Dequeue);
-            var service = new SonarQubeService(client.Object);
-            await service.ConnectAsync(new ConnectionInformation(new Uri("http://mysq.com")), CancellationToken.None);
-
-            // Act
-            var result = await service.GetAllOrganizationsAsync(CancellationToken.None);
-
-            // Assert
-            client.VerifyAll();
-            result.Should().NotBeNull();
-            result.Should().HaveCount(1);
-            result[0].Key.Should().Be("key");
-            result[0].Name.Should().Be("name");
-        }
-
-        [TestMethod]
-        public async Task GetAllProjectsAsync_WhenNoOrganizationIsSpecified_ReturnsExpectedResult()
-        {
-            // Arrange
-            var successResponse = new HttpResponseMessage(HttpStatusCode.OK);
-            var client = new Mock<ISonarQubeClient>();
-            client.Setup(x => x.ValidateCredentialsAsync(It.IsAny<ConnectionDTO>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync(() => new Result<CredentialsDTO>(successResponse, new CredentialsDTO { AreValid = true }));
-            client.Setup(x => x.GetVersionAsync(It.IsAny<ConnectionDTO>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync(() => new Result<VersionDTO>(successResponse, new VersionDTO { Version = "5.6" }));
-            client.Setup(x => x.GetProjectsAsync(It.IsAny<ConnectionDTO>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync(() => new Result<ProjectDTO[]>(successResponse,
-                    new[] { new ProjectDTO { Key = "key", Name = "name" } }));
-            var service = new SonarQubeService(client.Object);
-            await service.ConnectAsync(new ConnectionInformation(new Uri("http://mysq.com")), CancellationToken.None);
-
-            // Act
-            var result = await service.GetAllProjectsAsync(null, CancellationToken.None);
-
-            // Assert
-            client.VerifyAll();
-            result.Should().NotBeNull();
-            result.Should().HaveCount(1);
-            result[0].Key.Should().Be("key");
-            result[0].Name.Should().Be("name");
-        }
-
-        [TestMethod]
-        public async Task GetAllProjectsAsync_WhenOrganizationIsSpecified_ReturnsExpectedResult()
-        {
-            // Arrange
-            var successResponse = new HttpResponseMessage(HttpStatusCode.OK);
-            var client = new Mock<ISonarQubeClient>();
-            client.Setup(x => x.ValidateCredentialsAsync(It.IsAny<ConnectionDTO>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync(() => new Result<CredentialsDTO>(successResponse, new CredentialsDTO { AreValid = true }));
-            client.Setup(x => x.GetVersionAsync(It.IsAny<ConnectionDTO>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync(() => new Result<VersionDTO>(successResponse, new VersionDTO { Version = "5.6" }));
-            client.Setup(x => x.GetComponentsSearchProjectsAsync(It.IsAny<ConnectionDTO>(), It.IsAny<ComponentRequest>(),
-                    It.IsAny<CancellationToken>()))
-                .ReturnsAsync(
-                    new Queue<Result<ComponentDTO[]>>(
-                        new Result<ComponentDTO[]>[]
-                        {
-                            new Result<ComponentDTO[]>(successResponse, new[] { new ComponentDTO { Key = "key", Name = "name" } }),
-                            new Result<ComponentDTO[]>(successResponse, new ComponentDTO[0])
-                        }
-                    ).Dequeue);
-            var service = new SonarQubeService(client.Object);
-            await service.ConnectAsync(new ConnectionInformation(new Uri("http://mysq.com")), CancellationToken.None);
-
-            // Act
-            var result = await service.GetAllProjectsAsync("org", CancellationToken.None);
-
-            // Assert
-            client.VerifyAll();
-            result.Should().NotBeNull();
-            result.Should().HaveCount(1);
-            result[0].Key.Should().Be("key");
-            result[0].Name.Should().Be("name");
         }
     }
 }
