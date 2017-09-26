@@ -67,7 +67,7 @@ namespace SonarLint.VisualStudio.Integration.Vsix
             if (notificationIcon == null)
             {
                 notificationIcon = new NotificationIndicator();
-                notificationIcon.DataContext = notifications;
+                notificationIcon.DataContext = notifications.Model;
                 VisualStudioStatusBarHelper.AddStatusBarIcon(notificationIcon);
             }
 
@@ -99,7 +99,7 @@ namespace SonarLint.VisualStudio.Integration.Vsix
         {
             if (key == NotificationDataKey)
             {
-                formatter.Serialize(stream, notifications.NotificationData);
+                formatter.Serialize(stream, notifications.GetNotificationData());
             }
         }
 
@@ -119,6 +119,5 @@ namespace SonarLint.VisualStudio.Integration.Vsix
                 }
             }
         }
-
     }
 }

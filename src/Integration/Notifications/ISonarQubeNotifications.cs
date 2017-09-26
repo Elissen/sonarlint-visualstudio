@@ -28,6 +28,8 @@ namespace SonarLint.VisualStudio.Integration.Notifications
 
         void Stop();
 
-        NotificationData NotificationData { get; }
+        NotificationData GetNotificationData();
+
+        INotificationIndicatorViewModel Model { get; }
     }
 }

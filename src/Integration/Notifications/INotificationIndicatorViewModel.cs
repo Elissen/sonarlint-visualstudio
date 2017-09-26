@@ -18,30 +18,22 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
-using Moq;
-using SonarLint.VisualStudio.Integration.UnitTests;
+using SonarLint.VisualStudio.Integration.Service;
 
-namespace SonarLint.VisualStudio.Integration.Notifications.UnitTests
+namespace SonarLint.VisualStudio.Integration.Notifications
 {
-    [TestClass]
-    public class SonarQubeNotifications_Text
+    public interface INotificationIndicatorViewModel
     {
-        private SonarQubeNotifications notifications;
+        string TooltipText { get; set; }
 
-        [TestInitialize]
-        public void TestInitialize()
-        {
-            notifications = new SonarQubeNotifications(
-                new ConfigurableSonarQubeServiceWrapper(), new ConfigurableStateManager(), new Mock<ITimer>().Object);
-        }
+        bool HasUnreadEvents { get; set; }
 
-        [TestMethod]
-        public void Text_Raises_PropertyChanged()
-        {
-            // Assert
-            notifications.ShouldRaisePropertyChangeFor(x => x.Text);
-        }
+        bool IsIconVisible { get; set; }
+
+        bool AreNotificationsEnabled { get; set; }
+
+        bool IsBalloonTooltipVisible { get; set; }
+
+        void SetNotificationEvents(NotificationEvent[] events);
     }
 }

@@ -29,54 +29,54 @@ using SonarLint.VisualStudio.Integration.UnitTests;
 namespace SonarLint.VisualStudio.Integration.Notifications.UnitTests
 {
     [TestClass]
-    public class SonarQubeNotifications_Start
+    public class SonarQubeNotificationsTests
     {
         private ISonarQubeServiceWrapper sqService;
         private IStateManager stateManager;
         private Mock<ITimer> timerMock;
+        private Mock<NotificationIndicatorViewModel> modelMock;
 
         [TestInitialize]
         public void TestInitialize()
         {
             sqService = new ConfigurableSonarQubeServiceWrapper();
+            timerMock = new Mock<ITimer>();
+            modelMock = new Mock<NotificationIndicatorViewModel>();
+
             stateManager = new ConfigurableStateManager();
             var connection = new ConnectionInformation(new Uri("http://127.0.0.1"));
             var projects = new ProjectInformation[] { new ProjectInformation(), new ProjectInformation() };
             stateManager.SetProjects(connection, projects);
             (stateManager as ConfigurableStateManager).ConnectedServers.Add(connection);
-
-            timerMock = new Mock<ITimer>();
         }
 
         [TestMethod]
-        public void Start_Sets_IsVisible_Timer_Start()
+        public void Start_Sets_IsVisible()
         {
             // Arrange
             timerMock.Setup(mock => mock.Start());
 
-            var notifications = new SonarQubeNotifications(sqService, stateManager, timerMock.Object);
-            notifications.IsVisible.Should().BeFalse(); // check default value
+            var notifications = new SonarQubeNotifications(sqService, stateManager,
+                modelMock.Object, timerMock.Object);
 
             // Act
             notifications.Start(null);
 
             // Assert
-            timerMock.VerifyAll();
-            notifications.IsVisible.Should().BeTrue();
+            modelMock.Object.IsIconVisible.Should().BeTrue();
         }
-
 
         [TestMethod]
         public void Test_DefaultNotificationDate_IsOneDayAgo()
         {
             // Arrange
             using (var notifications = new SonarQubeNotifications(sqService, stateManager,
-                timerMock.Object))
+                modelMock.Object, timerMock.Object))
             {
                 notifications.Start(null);
 
                 // Assert
-                AreDatesEqual(notifications.NotificationData.LastNotificationDate,
+                AreDatesEqual(notifications.GetNotificationData().LastNotificationDate,
                     DateTimeOffset.Now.AddDays(-1), TimeSpan.FromMinutes(1)).Should().BeTrue();
             }
         }
@@ -86,7 +86,7 @@ namespace SonarLint.VisualStudio.Integration.Notifications.UnitTests
         {
             // Arrange
             using (var notifications = new SonarQubeNotifications(sqService, stateManager,
-                timerMock.Object))
+                modelMock.Object, timerMock.Object))
             {
                 var date = new NotificationData
                 {
@@ -98,7 +98,7 @@ namespace SonarLint.VisualStudio.Integration.Notifications.UnitTests
                 notifications.Start(date);
 
                 // Assert
-                AreDatesEqual(notifications.NotificationData.LastNotificationDate,
+                AreDatesEqual(notifications.GetNotificationData().LastNotificationDate,
                     DateTimeOffset.Now.AddDays(-1), TimeSpan.FromMinutes(1)).Should().BeTrue();
             }
         }
@@ -109,5 +109,6 @@ namespace SonarLint.VisualStudio.Integration.Notifications.UnitTests
             var diff = date1 - date2;
             return diff.Duration() < allowedDifference;
         }
+
     }
 }

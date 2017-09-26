@@ -19,140 +19,72 @@
  */
 
 using System;
-using System.Collections.ObjectModel;
 using System.ComponentModel.Composition;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
-using System.Timers;
 using Microsoft.VisualStudio.Shell;
 using SonarLint.VisualStudio.Integration.Service;
 using SonarLint.VisualStudio.Integration.State;
-using SonarLint.VisualStudio.Integration.WPF;
-
 using CancellationTokenSource = System.Threading.CancellationTokenSource;
 
 namespace SonarLint.VisualStudio.Integration.Notifications
 {
     [Export(typeof(ISonarQubeNotifications))]
-    internal class SonarQubeNotifications : ViewModelBase, ISonarQubeNotifications
+    internal class SonarQubeNotifications : ISonarQubeNotifications
     {
-        private string text = "You have no events.";
-        private bool hasUnreadEvents;
-        private bool isVisible;
-        private bool isBalloonTooltipVisible;
-
         private readonly ITimer timer;
-        private const string iconPath = "pack://application:,,,/SonarLint;component/Resources/sonarqube_green.ico";
-        private const string tooltipTitle = "SonarQube notification";
         private readonly IStateManager stateManager;
         private readonly ISonarQubeServiceWrapper sonarQubeService;
         private readonly CancellationTokenSource cancellation = new CancellationTokenSource();
+        public INotificationIndicatorViewModel Model { get; private set; }
 
-        public ObservableCollection<NotificationEvent> NotificationEvents { get; }
-        public NotificationData NotificationData { get; private set; }
+        private DateTimeOffset lastCheckDate;
+
+        public NotificationData GetNotificationData() =>
+            new NotificationData
+                {
+                    IsEnabled = Model.AreNotificationsEnabled,
+                    LastNotificationDate = lastCheckDate
+                };
 
         [ImportingConstructor]
         [ExcludeFromCodeCoverage] // Do not unit test MEF constructor
         internal SonarQubeNotifications(IHost host)
             : this(host.SonarQubeService, host.VisualStateManager,
-                  new TimerWrapper { Interval = 10000 /* 60sec */ })
+                  new NotificationIndicatorViewModel(),
+                  new TimerWrapper { Interval = 10000 /* TODO: UNHACK MAKE SURE IT'S 60sec */ })
         {
         }
 
         internal SonarQubeNotifications(ISonarQubeServiceWrapper sonarQubeService,
-            IStateManager stateManager, ITimer timer)
+            IStateManager stateManager, INotificationIndicatorViewModel model,
+            ITimer timer)
         {
             this.timer = timer;
             this.sonarQubeService = sonarQubeService;
             this.stateManager = stateManager;
+            Model = model;
 
             timer.Elapsed += OnTimerElapsed;
-            NotificationEvents = new ObservableCollection<NotificationEvent>();
-        }
-
-        public string Text
-        {
-            get
-            {
-                return text;
-            }
-            set
-            {
-                SetAndRaisePropertyChanged(ref text, value);
-            }
-        }
-
-        public bool HasUnreadEvents
-        {
-            get
-            {
-                return hasUnreadEvents;
-            }
-
-            set
-            {
-                SetAndRaisePropertyChanged(ref hasUnreadEvents, value);
-
-                UpdateTooltipText();
-            }
-        }
-
-        public bool IsVisible
-        {
-            get
-            {
-                return isVisible;
-            }
-            set
-            {
-                SetAndRaisePropertyChanged(ref isVisible, value);
-            }
-        }
-
-        public bool IsEnabled
-        {
-            get
-            {
-                return NotificationData.IsEnabled;
-            }
-            set
-            {
-                var isEnabled = NotificationData.IsEnabled;
-                SetAndRaisePropertyChanged(ref isEnabled, value);
-                NotificationData.IsEnabled = IsEnabled;
-            }
-        }
-
-        public bool IsBalloonTooltipVisible
-        {
-            get
-            {
-                return isBalloonTooltipVisible;
-            }
-            set
-            {
-                SetAndRaisePropertyChanged(ref isBalloonTooltipVisible, value);
-            }
         }
 
         public void Start(NotificationData notificationData)
         {
-            NotificationData = notificationData ??
-                new NotificationData
-                {
-                    IsEnabled = true,
-                    LastNotificationDate = DateTimeOffset.Now.AddDays(-1)
-                };
+            Model.AreNotificationsEnabled = notificationData?.IsEnabled ?? true;
 
             var oneDayAgo = DateTimeOffset.Now.AddDays(-1);
-            if (NotificationData.LastNotificationDate < oneDayAgo)
+            if (notificationData == null ||
+                notificationData.LastNotificationDate < oneDayAgo)
             {
-                NotificationData.LastNotificationDate = oneDayAgo;
+                lastCheckDate = oneDayAgo;
+            }
+            else
+            {
+                lastCheckDate = notificationData.LastNotificationDate;
             }
 
-            var serverConnection = ThreadHelper.Generic.Invoke(() => stateManager?.GetConnectedServers().FirstOrDefault());
+            UpdateEvents();
             timer.Start();
-            OnTimerElapsed(this, null);
         }
 
         public void Stop()
@@ -160,10 +92,10 @@ namespace SonarLint.VisualStudio.Integration.Notifications
             cancellation.Cancel();
 
             timer.Stop();
-            IsVisible = false;
+            Model.IsIconVisible = false;
         }
 
-        private void OnTimerElapsed(object sender, ElapsedEventArgs e)
+        private void UpdateEvents()
         {
             var events = GetNotificationEvents();
             if (events == null)
@@ -171,77 +103,68 @@ namespace SonarLint.VisualStudio.Integration.Notifications
                 Stop();
                 return;
             }
-
-            if (!IsVisible && events != null)
-            {
-                IsVisible = true;
-            }
-
-
-            if (IsEnabled)
-            {
-                ThreadHelper.Generic.Invoke(() => SetNotificationEvents(events));
-            }
+            Model.IsIconVisible = true;
+            Model.SetNotificationEvents(events);
         }
 
-        private async void AnimateBalloonTooltip()
+        private void OnTimerElapsed(object sender, EventArgs e)
         {
-            IsBalloonTooltipVisible = true;
-            await System.Threading.Tasks.Task.Delay(4000);
-            IsBalloonTooltipVisible = false;
-        }
-
-        private void SetNotificationEvents(NotificationEvent[] events)
-        {
-            if (events.Length > 0)
-            {
-                NotificationEvents.Clear();
-                Array.ForEach(events, NotificationEvents.Add);
-
-                HasUnreadEvents = true;
-            }
-        }
-
-        private void UpdateTooltipText()
-        {
-            Text = NotificationEvents.Count > 0 && HasUnreadEvents
-                ? $"You have {NotificationEvents.Count} unread events."
-                : "You have no unread events.";
+            UpdateEvents();
         }
 
         private NotificationEvent[] GetNotificationEvents()
         {
-            var connection = ThreadHelper.Generic.Invoke(() => stateManager?.GetConnectedServers().FirstOrDefault());
-            var projectKey = stateManager?.BoundProjectKey;
-
-            if (connection != null && projectKey != null)
+            //TODO: UNHACK
+            return new NotificationEvent[]
             {
-                return new NotificationEvent[0];
-            }
-
-            NotificationEvent[] events = null;
-            if (sonarQubeService.TryGetNotificationEvents(connection, cancellation.Token, projectKey,
-                NotificationData.LastNotificationDate, out events))
-            {
-                if (events?.Length > 0)
+                new NotificationEvent
                 {
-                    NotificationData.LastNotificationDate = events.Max(ev => ev.Date);
-                }
-            }
-            else
-            {
-                events = new NotificationEvent[0];
-            }
+                    Category = "Category",
+                    Message = "Quality gate is Red (was Green)",
+                    Link = new Uri("http://www.com"),
+                    Date = DateTimeOffset.Now,
+                    Project = "Project"
+                },
 
-            return events;
+                    new NotificationEvent
+                {
+                    Category = "Category",
+                    Message = "You have 17 new issues assigned to you",
+                    Link = new Uri("http://www.com"),
+                    Date = DateTimeOffset.Now.AddMinutes(5),
+                    Project = "Project"
+                }
+            };
+
+            //var connection = ThreadHelper.Generic.Invoke(() => stateManager?.GetConnectedServers().FirstOrDefault());
+            //var projectKey = stateManager?.BoundProjectKey;
+
+            //if (connection != null && projectKey != null)
+            //{
+            //    return new NotificationEvent[0];
+            //}
+
+            //NotificationEvent[] events;
+            //if (sonarQubeService.TryGetNotificationEvents(connection, cancellation.Token, projectKey,
+            //    lastCheckDate, out events))
+            //{
+            //    if (events.Length > 0)
+            //    {
+            //        lastCheckDate = events.Max(ev => ev.Date);
+            //    }
+            //}
+            //else
+            //{
+            //    return new NotificationEvent[0];
+            //}
+
+            //return events;
         }
 
         public void Dispose()
         {
             timer.Elapsed -= OnTimerElapsed;
-
             Stop();
-
             timer.Dispose();
         }
     }

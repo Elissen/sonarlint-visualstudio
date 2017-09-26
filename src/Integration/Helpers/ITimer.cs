@@ -19,13 +19,12 @@
  */
 
 using System;
-using System.Timers;
 
 namespace SonarLint.VisualStudio.Integration
 {
     public interface ITimer : IDisposable
     {
-        event ElapsedEventHandler Elapsed;
+        event EventHandler Elapsed;
 
         bool AutoReset { get; set; }
         bool Enabled { get; set; }

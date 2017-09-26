@@ -19,9 +19,11 @@
  */
 
 using System.Diagnostics;
+using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Markup;
 using System.Windows.Navigation;
 
 namespace SonarLint.VisualStudio.Integration.Notifications
@@ -30,6 +32,9 @@ namespace SonarLint.VisualStudio.Integration.Notifications
     {
         public NotificationIndicator()
         {
+            // Set the culture for the control, otherwise it would be us-EN and not current culture.
+            Language = XmlLanguage.GetLanguage(CultureInfo.CurrentCulture.IetfLanguageTag);
+
             InitializeComponent();
         }
 
@@ -41,13 +46,12 @@ namespace SonarLint.VisualStudio.Integration.Notifications
         private void Close_Click(object sender, RoutedEventArgs e)
         {
             Close();
+            e.Handled = true;
         }
 
         private void Hyperlink_RequestNavigate(object sender, RequestNavigateEventArgs e)
         {
             Close();
-
-            e.Handled = true;
 
             var startInfo = new ProcessStartInfo(e.Uri.AbsoluteUri)
             {
