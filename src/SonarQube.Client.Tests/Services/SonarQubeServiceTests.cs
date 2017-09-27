@@ -27,6 +27,7 @@ using System.Threading.Tasks;
 using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
+using Moq.Protected;
 using SonarQube.Client.Messages;
 using SonarQube.Client.Models;
 
@@ -374,6 +375,107 @@ namespace SonarQube.Client.Services.Tests
             result.Should().HaveCount(2);
             result[0].ResolutionState.Should().Be(SonarQubeIssueResolutionState.WontFix);
             result[1].ResolutionState.Should().Be(SonarQubeIssueResolutionState.FalsePositive);
+        }
+
+        [TestMethod]
+        public async Task GetNotificationEventsAsync_ReturnsExpectedResult()
+        {
+            // Arrange
+            var client = new Mock<ISonarQubeClient>();
+            var successResponse = new HttpResponseMessage(HttpStatusCode.OK);
+
+            var expectedEvent = new NotificationsResponse
+            {
+                Category = "QUALITY_GATE",
+                Link = new Uri("http://foo.com"),
+                Date = new DateTimeOffset(2010, 1, 1, 14, 59, 59, TimeSpan.FromHours(2)),
+                Message = "foo",
+                Project = "test"
+            };
+
+            client.Setup(x => x.ValidateCredentialsAsync(It.IsAny<ConnectionRequest>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(() => new Result<CredentialResponse>(successResponse, new CredentialResponse { IsValid = true }));
+
+            client.Setup(x => x.GetVersionAsync(It.IsAny<ConnectionRequest>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(() => new Result<VersionResponse>(successResponse, new VersionResponse { Version = "6.6" }));
+
+            client.Setup(x => x.GetNotificationEventsAsync(It.IsAny<ConnectionRequest>(),
+                It.IsAny<NotificationsRequest>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => new Result<NotificationsResponse[]>(successResponse, new[] { expectedEvent }));
+
+            var service = new SonarQubeService(client.Object);
+            await service.ConnectAsync(new ConnectionInformation(new Uri("http://mysq.com")), CancellationToken.None);
+
+            // Act
+            var result = await service.GetNotificationEventsAsync("test", DateTimeOffset.Now, CancellationToken.None);
+
+            // Assert
+            client.VerifyAll();
+            result.Should().NotBeNull();
+            result.Should().HaveCount(1);
+
+            result[0].Category.Should().Be(expectedEvent.Category);
+            result[0].Link.Should().Be(expectedEvent.Link);
+            result[0].Date.Should().Be(expectedEvent.Date);
+            result[0].Message.Should().Be(expectedEvent.Message);
+        }
+
+        [TestMethod]
+        public async Task ThrowWhenNotConnected()
+        {
+            var httpHandler = new Mock<HttpMessageHandler>();
+            httpHandler.Protected()
+                .Setup<Task<HttpResponseMessage>>("SendAsync", ItExpr.IsAny<HttpRequestMessage>(),
+                    ItExpr.IsAny<CancellationToken>())
+                .Callback<HttpRequestMessage, CancellationToken>((request, token) =>
+                {
+                    Assert.Fail("Server should not be contacted when not connected");
+                });
+
+            var sqService = new SonarQubeService(new SonarQubeClient(httpHandler.Object, TimeSpan.FromSeconds(10)));
+
+            await AssertExceptionThrownWhenNotConnected(() =>
+                sqService.GetAllOrganizationsAsync(CancellationToken.None));
+
+            await AssertExceptionThrownWhenNotConnected(() =>
+                sqService.GetAllPluginsAsync(CancellationToken.None));
+
+            await AssertExceptionThrownWhenNotConnected(() =>
+                sqService.GetAllProjectsAsync("organizationKey", CancellationToken.None));
+
+            await AssertExceptionThrownWhenNotConnected(() =>
+                sqService.GetAllPropertiesAsync(CancellationToken.None));
+
+            await AssertExceptionThrownWhenNotConnected(() =>
+            {
+                sqService.GetProjectDashboardUrl("projectKey");
+                return Task.Delay(0);
+            });
+
+            await AssertExceptionThrownWhenNotConnected(() =>
+                sqService.GetQualityProfileAsync("projectKey", SonarQubeLanguage.CSharp, CancellationToken.None));
+
+            await AssertExceptionThrownWhenNotConnected(() =>
+                sqService.GetRoslynExportProfileAsync("qualityProfileName", SonarQubeLanguage.CSharp, CancellationToken.None));
+
+            await AssertExceptionThrownWhenNotConnected(() =>
+                sqService.GetNotificationEventsAsync("projectKey", DateTimeOffset.Now, CancellationToken.None));
+        }
+
+        private async Task AssertExceptionThrownWhenNotConnected(Func<Task> action)
+        {
+            bool wasThrown = false;
+            try
+            {
+                await action();
+            }
+            catch (Exception ex)
+            {
+                wasThrown = true;
+                ex.Message.Should().Be("This operation expects the service to be connected.");
+            }
+            wasThrown.Should().BeTrue("Expected InvalidOperationException");
         }
     }
 }

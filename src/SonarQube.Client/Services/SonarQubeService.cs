@@ -20,6 +20,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.ComponentModel.Composition;
 using System.Linq;
 using System.Net;
 using System.Threading;
@@ -29,6 +30,7 @@ using SonarQube.Client.Models;
 
 namespace SonarQube.Client.Services
 {
+    [Export(typeof(ISonarQubeService))]
     public class SonarQubeService : ISonarQubeService
     {
         internal const int MaximumPageSize = 500;
@@ -213,6 +215,8 @@ namespace SonarQube.Client.Services
         public async Task<RoslynExportProfileResponse> GetRoslynExportProfileAsync(string qualityProfileName,
             SonarQubeLanguage language, CancellationToken token)
         {
+            EnsureIsConnected();
+
             var request = new RoslynExportProfileRequest { QualityProfileName = qualityProfileName, LanguageKey = language.Key };
             var roslynExportResult = await this.sonarqubeClient.GetRoslynExportProfileAsync(this.connection, request, token);
             roslynExportResult.EnsureSuccess();
@@ -237,6 +241,26 @@ namespace SonarQube.Client.Services
                 .Select(SonarQubeIssue.FromResponse)
                 .ToList();
         }
+
+        public async Task<IList<SonarQubeNotification>> GetNotificationEventsAsync(string projectKey,
+                DateTimeOffset eventsSince, CancellationToken token)
+        {
+            EnsureIsConnected();
+
+            var request = new NotificationsRequest { ProjectKey = projectKey, EventsSince = eventsSince };
+            Result<NotificationsResponse[]> eventsResult = await this.sonarqubeClient.GetNotificationEventsAsync(this.connection,
+                request, token);
+
+            if (!eventsResult.IsSuccess)
+            {
+                return eventsResult.StatusCode == HttpStatusCode.NotFound
+                    ? null : new List<SonarQubeNotification>();
+            }
+
+            return eventsResult.Value.Select(SonarQubeNotification.FromResponse).ToList();
+        }
+
+
 
         internal void EnsureIsConnected()
         {

@@ -21,22 +21,22 @@
 using System;
 using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-using SonarLint.VisualStudio.Integration.Service;
+using SonarQube.Client.Models;
 
 namespace SonarLint.VisualStudio.Integration.Notifications.UnitTests
 {
     [TestClass]
     public class NotificationIndicatorViewModelTests
     {
-        private static NotificationEvent testEvent = new NotificationEvent
-            {
+        private static SonarQubeNotification testEvent = new SonarQubeNotification
+        {
                 Category = "foo",
                 Message = "foo",
                 Link = new Uri("http://foo.com"),
                 Date = new DateTimeOffset(2000, 1, 1, 0, 0, 0, TimeSpan.FromHours(2))
             };
 
-        private static NotificationEvent[] testEvents = new NotificationEvent[] { testEvent };
+        private static SonarQubeNotification[] testEvents = new SonarQubeNotification[] { testEvent };
 
         [TestMethod]
         public void Text_Raises_PropertyChanged()
@@ -110,7 +110,7 @@ namespace SonarLint.VisualStudio.Integration.Notifications.UnitTests
         [TestMethod]
         public void HasUnreadEvents_WithEvents_UpdatesTooltipText()
         {
-            var model = new NotificationIndicatorViewModel();
+            var model = new NotificationIndicatorViewModel(a => a());
             model.MonitorEvents();
 
             model.IsIconVisible = true;
@@ -120,7 +120,7 @@ namespace SonarLint.VisualStudio.Integration.Notifications.UnitTests
 
             model.ShouldRaisePropertyChangeFor(x => x.IsBalloonTooltipVisible);
 
-            model.TooltipText.Should().Be("You have 1 unread events.");
+            model.TooltipText.Should().Be("You have 1 unread event.");
         }
 
         [TestMethod]
@@ -135,7 +135,7 @@ namespace SonarLint.VisualStudio.Integration.Notifications.UnitTests
             model = SetupModelWithNotifications(true, false, testEvents);
             model.HasUnreadEvents.Should().BeFalse();
 
-            model = SetupModelWithNotifications(true, true, new NotificationEvent[0]);
+            model = SetupModelWithNotifications(true, true, new SonarQubeNotification[0]);
             model.HasUnreadEvents.Should().BeFalse();
 
             model = SetupModelWithNotifications(true, true, null);
@@ -147,9 +147,9 @@ namespace SonarLint.VisualStudio.Integration.Notifications.UnitTests
         }
 
         private NotificationIndicatorViewModel SetupModelWithNotifications(bool areEnabled,
-            bool areVisible, NotificationEvent[] events)
+            bool areVisible, SonarQubeNotification[] events)
         {
-            var model = new NotificationIndicatorViewModel();
+            var model = new NotificationIndicatorViewModel(a => a());
             model.AreNotificationsEnabled = areEnabled;
             model.IsIconVisible = areVisible;
             model.SetNotificationEvents(events);

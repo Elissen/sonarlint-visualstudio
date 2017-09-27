@@ -19,12 +19,13 @@
  */
 
 using System;
+using System.Threading.Tasks;
 
 namespace SonarLint.VisualStudio.Integration.Notifications
 {
     public interface ISonarQubeNotifications : IDisposable
     {
-        void Start(NotificationData lastEventDate);
+        Task StartAsync(NotificationData lastEventDate);
 
         void Stop();
 

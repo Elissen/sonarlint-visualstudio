@@ -19,12 +19,14 @@
  */
 
 using System;
+using System.Collections.Generic;
 using System.ComponentModel.Composition;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
-using Microsoft.VisualStudio.Shell;
-using SonarLint.VisualStudio.Integration.Service;
+using System.Threading.Tasks;
 using SonarLint.VisualStudio.Integration.State;
+using SonarQube.Client.Models;
+using SonarQube.Client.Services;
 using CancellationTokenSource = System.Threading.CancellationTokenSource;
 
 namespace SonarLint.VisualStudio.Integration.Notifications
@@ -34,7 +36,7 @@ namespace SonarLint.VisualStudio.Integration.Notifications
     {
         private readonly ITimer timer;
         private readonly IStateManager stateManager;
-        private readonly ISonarQubeServiceWrapper sonarQubeService;
+        private readonly ISonarQubeService sonarQubeService;
         private readonly CancellationTokenSource cancellation = new CancellationTokenSource();
         public INotificationIndicatorViewModel Model { get; private set; }
 
@@ -56,7 +58,7 @@ namespace SonarLint.VisualStudio.Integration.Notifications
         {
         }
 
-        internal SonarQubeNotifications(ISonarQubeServiceWrapper sonarQubeService,
+        internal SonarQubeNotifications(ISonarQubeService sonarQubeService,
             IStateManager stateManager, INotificationIndicatorViewModel model,
             ITimer timer)
         {
@@ -68,7 +70,7 @@ namespace SonarLint.VisualStudio.Integration.Notifications
             timer.Elapsed += OnTimerElapsed;
         }
 
-        public void Start(NotificationData notificationData)
+        public async Task StartAsync(NotificationData notificationData)
         {
             Model.AreNotificationsEnabled = notificationData?.IsEnabled ?? true;
 
@@ -83,7 +85,7 @@ namespace SonarLint.VisualStudio.Integration.Notifications
                 lastCheckDate = notificationData.LastNotificationDate;
             }
 
-            UpdateEvents();
+            await UpdateEvents();
             timer.Start();
         }
 
@@ -95,9 +97,9 @@ namespace SonarLint.VisualStudio.Integration.Notifications
             Model.IsIconVisible = false;
         }
 
-        private void UpdateEvents()
+        private async Task UpdateEvents()
         {
-            var events = GetNotificationEvents();
+            var events = await GetNotificationEvents();
             if (events == null)
             {
                 Stop();
@@ -107,58 +109,50 @@ namespace SonarLint.VisualStudio.Integration.Notifications
             Model.SetNotificationEvents(events);
         }
 
-        private void OnTimerElapsed(object sender, EventArgs e)
+        private async void OnTimerElapsed(object sender, EventArgs e)
         {
-            UpdateEvents();
+            await UpdateEvents();
         }
 
-        private NotificationEvent[] GetNotificationEvents()
+        private async Task<IList<SonarQubeNotification>> GetNotificationEvents()
         {
             //TODO: UNHACK
-            return new NotificationEvent[]
-            {
-                new NotificationEvent
-                {
-                    Category = "Category",
-                    Message = "Quality gate is Red (was Green)",
-                    Link = new Uri("http://www.com"),
-                    Date = DateTimeOffset.Now,
-                    Project = "Project"
-                },
-
-                    new NotificationEvent
-                {
-                    Category = "Category",
-                    Message = "You have 17 new issues assigned to you",
-                    Link = new Uri("http://www.com"),
-                    Date = DateTimeOffset.Now.AddMinutes(5),
-                    Project = "Project"
-                }
-            };
-
-            //var connection = ThreadHelper.Generic.Invoke(() => stateManager?.GetConnectedServers().FirstOrDefault());
-            //var projectKey = stateManager?.BoundProjectKey;
-
-            //if (connection != null && projectKey != null)
+            //return new SonarQubeNotification[]
             //{
-            //    return new NotificationEvent[0];
-            //}
-
-            //NotificationEvent[] events;
-            //if (sonarQubeService.TryGetNotificationEvents(connection, cancellation.Token, projectKey,
-            //    lastCheckDate, out events))
-            //{
-            //    if (events.Length > 0)
+            //    new SonarQubeNotification
             //    {
-            //        lastCheckDate = events.Max(ev => ev.Date);
-            //    }
-            //}
-            //else
-            //{
-            //    return new NotificationEvent[0];
-            //}
+            //        Category = "Category",
+            //        Message = "Quality gate is Red (was Green)",
+            //        Link = new Uri("http://www.com"),
+            //        Date = DateTimeOffset.Now
+            //    },
 
-            //return events;
+            //        new SonarQubeNotification
+            //    {
+            //        Category = "Category",
+            //        Message = "You have 17 new issues assigned to you",
+            //        Link = new Uri("http://www.com"),
+            //        Date = DateTimeOffset.Now.AddMinutes(5)
+            //    }
+            //};
+
+            var projectKey = stateManager.IsConnected
+                ? stateManager?.BoundProjectKey : null;
+
+            if (projectKey == null)
+            {
+                return new SonarQubeNotification[0];
+            }
+
+            var events = await sonarQubeService.GetNotificationEventsAsync(projectKey,
+                lastCheckDate, cancellation.Token);
+
+            if (events != null && events.Count > 0)
+            {
+                lastCheckDate = events.Max(ev => ev.Date);
+            }
+
+            return events;
         }
 
         public void Dispose()

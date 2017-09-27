@@ -1,5 +1,5 @@
 ﻿/*
- * SonarLint for Visual Studio
+ * SonarQube Client
  * Copyright (C) 2016-2017 SonarSource SA
  * mailto:info AT sonarsource DOT com
  *
@@ -18,23 +18,30 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-using System.Collections.Generic;
-using SonarQube.Client.Models;
+using System;
+using SonarQube.Client.Messages;
 
-namespace SonarLint.VisualStudio.Integration.Notifications
+namespace SonarQube.Client.Models
 {
-    public interface INotificationIndicatorViewModel
+    public class SonarQubeNotification
     {
-        string TooltipText { get; set; }
+        public string Category { get; set; }
 
-        bool HasUnreadEvents { get; set; }
+        public string Message { get; set; }
 
-        bool IsIconVisible { get; set; }
+        public Uri Link { get; set; }
 
-        bool AreNotificationsEnabled { get; set; }
+        public DateTimeOffset Date { get; set; }
 
-        bool IsBalloonTooltipVisible { get; set; }
-
-        void SetNotificationEvents(IList<SonarQubeNotification> events);
+        public static SonarQubeNotification FromResponse(NotificationsResponse response)
+        {
+            return new SonarQubeNotification
+            {
+                Category = response.Category,
+                Message = response.Message,
+                Link = response.Link,
+                Date = response.Date
+            };
+        }
     }
 }

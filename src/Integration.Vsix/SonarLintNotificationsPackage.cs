@@ -73,7 +73,7 @@ namespace SonarLint.VisualStudio.Integration.Vsix
 
             if (isBound)
             {
-                notifications.Start(notificationData);
+                notifications.StartAsync(notificationData);
             }
             else
             {

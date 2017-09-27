@@ -91,5 +91,11 @@ namespace SonarQube.Client.Services
         ///     Validates the given credentials on the given SonarQube server.
         /// </summary>
         Task<Result<CredentialResponse>> ValidateCredentialsAsync(ConnectionRequest connection, CancellationToken token);
+
+        /// <summary>
+        ///     Gets list of notifications for the specified project from the given SonarQube server.
+        /// </summary>
+        Task<Result<NotificationsResponse[]>> GetNotificationEventsAsync(ConnectionRequest connection,
+            NotificationsRequest request, CancellationToken token);
     }
 }

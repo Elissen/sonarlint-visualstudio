@@ -19,11 +19,12 @@
  */
 
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Windows.Input;
 using Microsoft.VisualStudio.Shell;
-using SonarLint.VisualStudio.Integration.Service;
 using SonarLint.VisualStudio.Integration.WPF;
+using SonarQube.Client.Models;
 
 namespace SonarLint.VisualStudio.Integration.Notifications
 {
@@ -35,12 +36,21 @@ namespace SonarLint.VisualStudio.Integration.Notifications
         private bool isBalloonTooltipVisible;
         private bool areNotificationsEnabled;
         private readonly ITimer autocloseTimer;
+        private readonly Action<Action> uiThreadInvoker;
 
-        public ObservableCollection<NotificationEvent> NotificationEvents { get; }
+        public ObservableCollection<SonarQubeNotification> NotificationEvents { get; }
 
+        // For testing
         public NotificationIndicatorViewModel()
+            : this (ThreadHelper.Generic.Invoke)
         {
-            NotificationEvents = new ObservableCollection<NotificationEvent>();
+        }
+
+        public NotificationIndicatorViewModel(Action<Action> uiThreadInvoker)
+        {
+            this.uiThreadInvoker = uiThreadInvoker;
+
+            NotificationEvents = new ObservableCollection<SonarQubeNotification>();
             text = GetTooltipText();
 
             autocloseTimer = new TimerWrapper { Interval = 3000, AutoReset = false };
@@ -119,20 +129,24 @@ namespace SonarLint.VisualStudio.Integration.Notifications
             }
         }
 
-        public void SetNotificationEvents(NotificationEvent[] events)
+        public void SetNotificationEvents(IList<SonarQubeNotification> events)
         {
             if (events == null ||
-                events.Length == 0 ||
+                events.Count == 0 ||
                 !AreNotificationsEnabled ||
                 !isVisible)
             {
                 return;
             }
 
-            ThreadHelper.Generic.Invoke(() =>
+            uiThreadInvoker(() =>
                 {
                     NotificationEvents.Clear();
-                    Array.ForEach(events, NotificationEvents.Add);
+
+                    foreach (var ev in events)
+                    {
+                        NotificationEvents.Add(ev);
+                    }
 
                     HasUnreadEvents = true;
                     IsBalloonTooltipVisible = true;

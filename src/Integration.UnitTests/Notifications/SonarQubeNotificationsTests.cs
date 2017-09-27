@@ -19,61 +19,99 @@
  */
 
 using System;
+using System.Net;
+using System.Net.Http;
+using System.Threading;
+using System.Threading.Tasks;
 using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
-using SonarLint.VisualStudio.Integration.Service;
 using SonarLint.VisualStudio.Integration.State;
 using SonarLint.VisualStudio.Integration.UnitTests;
+using SonarQube.Client.Messages;
+using SonarQube.Client.Models;
+using SonarQube.Client.Services;
 
 namespace SonarLint.VisualStudio.Integration.Notifications.UnitTests
 {
     [TestClass]
     public class SonarQubeNotificationsTests
     {
-        private ISonarQubeServiceWrapper sqService;
         private IStateManager stateManager;
         private Mock<ITimer> timerMock;
-        private Mock<NotificationIndicatorViewModel> modelMock;
+        private Mock<INotificationIndicatorViewModel> modelMock;
+
+        private async Task<ISonarQubeService> GetConnectedService()
+        {
+            var expectedEvent = new NotificationsResponse
+            {
+                Category = "QUALITY_GATE",
+                Link = new Uri("http://foo.com"),
+                Date = new DateTimeOffset(2010, 1, 1, 14, 59, 59, TimeSpan.FromHours(2)),
+                Message = "foo",
+                Project = "test"
+            };
+
+            var successResponse = new HttpResponseMessage(HttpStatusCode.OK);
+            var client = new Mock<ISonarQubeClient>();
+            client.Setup(x => x.ValidateCredentialsAsync(It.IsAny<ConnectionRequest>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(() => new Result<CredentialResponse>(successResponse, new CredentialResponse { IsValid = true }));
+
+            client.Setup(x => x.GetVersionAsync(It.IsAny<ConnectionRequest>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(() => new Result<VersionResponse>(successResponse, new VersionResponse { Version = "6.6" }));
+
+            client.Setup(x => x.GetNotificationEventsAsync(It.IsAny<ConnectionRequest>(),
+                It.IsAny<NotificationsRequest>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => new Result<NotificationsResponse[]>(successResponse, new[] { expectedEvent }));
+
+            var service = new SonarQubeService(client.Object);
+            await service.ConnectAsync(new ConnectionInformation(new Uri("http://mysq.com")), CancellationToken.None);
+            return service;
+        }
 
         [TestInitialize]
         public void TestInitialize()
         {
-            sqService = new ConfigurableSonarQubeServiceWrapper();
             timerMock = new Mock<ITimer>();
-            modelMock = new Mock<NotificationIndicatorViewModel>();
+            modelMock = new Mock<INotificationIndicatorViewModel>();
+            modelMock.SetupAllProperties();
 
             stateManager = new ConfigurableStateManager();
             var connection = new ConnectionInformation(new Uri("http://127.0.0.1"));
-            var projects = new ProjectInformation[] { new ProjectInformation(), new ProjectInformation() };
+            var projects = new SonarQubeProject[] { new SonarQubeProject("test", "test") };
             stateManager.SetProjects(connection, projects);
             (stateManager as ConfigurableStateManager).ConnectedServers.Add(connection);
+
         }
 
         [TestMethod]
-        public void Start_Sets_IsVisible()
+        public async Task Start_Sets_IsVisible()
         {
             // Arrange
             timerMock.Setup(mock => mock.Start());
+            var sqService = await GetConnectedService();
 
+            var model = modelMock.Object;
             var notifications = new SonarQubeNotifications(sqService, stateManager,
-                modelMock.Object, timerMock.Object);
+               model, timerMock.Object);
 
             // Act
-            notifications.Start(null);
+            await notifications.StartAsync(null);
 
             // Assert
-            modelMock.Object.IsIconVisible.Should().BeTrue();
+            model.IsIconVisible.Should().BeTrue();
         }
 
         [TestMethod]
-        public void Test_DefaultNotificationDate_IsOneDayAgo()
+        public async Task Test_DefaultNotificationDate_IsOneDayAgo()
         {
             // Arrange
+            var sqService = await GetConnectedService();
             using (var notifications = new SonarQubeNotifications(sqService, stateManager,
                 modelMock.Object, timerMock.Object))
             {
-                notifications.Start(null);
+                await notifications.StartAsync(null);
 
                 // Assert
                 AreDatesEqual(notifications.GetNotificationData().LastNotificationDate,
@@ -82,9 +120,10 @@ namespace SonarLint.VisualStudio.Integration.Notifications.UnitTests
         }
 
         [TestMethod]
-        public void Test_OldNotificationDate_IsSetToOneDayAgo()
+        public async Task Test_OldNotificationDate_IsSetToOneDayAgo()
         {
             // Arrange
+            var sqService = await GetConnectedService();
             using (var notifications = new SonarQubeNotifications(sqService, stateManager,
                 modelMock.Object, timerMock.Object))
             {
@@ -95,7 +134,7 @@ namespace SonarLint.VisualStudio.Integration.Notifications.UnitTests
                        new DateTimeOffset(2000, 1, 1, 0, 0, 0, TimeSpan.FromHours(1))
                 };
 
-                notifications.Start(date);
+                await notifications.StartAsync(date);
 
                 // Assert
                 AreDatesEqual(notifications.GetNotificationData().LastNotificationDate,
@@ -109,6 +148,5 @@ namespace SonarLint.VisualStudio.Integration.Notifications.UnitTests
             var diff = date1 - date2;
             return diff.Duration() < allowedDifference;
         }
-
     }
 }
