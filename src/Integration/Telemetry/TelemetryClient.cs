@@ -26,8 +26,6 @@ using System.Threading.Tasks;
 
 namespace SonarLint.VisualStudio.Integration
 {
-    [Export(typeof(ITelemetryClient))]
-    [PartCreationPolicy(CreationPolicy.Shared)] // MEF Singleton
     public sealed class TelemetryClient : ITelemetryClient
     {
         private readonly HttpClient client;
