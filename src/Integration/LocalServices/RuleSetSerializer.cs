@@ -79,7 +79,24 @@ namespace SonarLint.VisualStudio.Integration
                 throw new ArgumentNullException(nameof(ruleSetPath));
             }
 
-            ruleSet.WriteToFile(ruleSetPath);
+            // We want to prevent writing out the file if the contents has not changed to prevent TFS, 
+            // or other source control, from marking the files as changed.
+            if (!File.Exists(ruleSetPath))
+            {
+                ruleSet.WriteToFile(ruleSetPath);
+            }
+            else
+            {
+                var tempFile = Path.GetTempFileName();
+                ruleSet.WriteToFile(tempFile);
+                var newContent = File.ReadAllText(tempFile);
+                var currentContent = File.ReadAllText(ruleSetPath);
+                if (currentContent != newContent)
+                {
+                    File.WriteAllText(ruleSetPath, newContent);
+                }
+                File.Delete(tempFile);
+            }
         }
     }
 }
